@@ -1,0 +1,5 @@
+# Local downloads and unpack leftovers. The Pages site is built from the
+# official release zip at deploy time, not from files committed here.
+*.zip
+SHA256SUMS.txt
+site/

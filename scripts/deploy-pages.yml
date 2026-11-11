@@ -1,0 +1,79 @@
+# Ready-to-install GitHub Actions workflow.
+#
+# This file is kept in scripts/ because the token used to create this
+# repository can push ordinary files but cannot create files under
+# .github/workflows/ (that requires the 'workflow' scope).
+#
+# To install: move this file to .github/workflows/deploy-pages.yml,
+# commit, and push. Then set the Pages source to GitHub Actions.
+#
+# Host the official WordCraft web (WASM) release on GitHub Pages.
+#
+# To bump WordCraft: change WORDCRAFT_VERSION below (no leading "v"), then
+# push to main or run this workflow from the Actions tab.
+
+name: Deploy WordCraft to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  WORDCRAFT_VERSION: "0.17.0"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download and unpack WordCraft web release
+        run: |
+          set -euo pipefail
+          VER="${WORDCRAFT_VERSION}"
+          ZIP="wordcraft-web-${VER}.zip"
+          BASE="https://github.com/storytold/wordcraft/releases/download/v${VER}"
+          curl -fsSL -o SHA256SUMS.txt "${BASE}/SHA256SUMS.txt"
+          curl -fsSL -o "${ZIP}" "${BASE}/${ZIP}"
+          grep -F " ${ZIP}" SHA256SUMS.txt | sha256sum -c -
+          mkdir -p /tmp/wordcraft-unpack site
+          unzip -q "${ZIP}" -d /tmp/wordcraft-unpack
+          SRC="$(find /tmp/wordcraft-unpack -maxdepth 2 -name index.html -printf '%h\n' | head -n1)"
+          if [ -z "${SRC}" ]; then
+            echo "index.html not found in ${ZIP}" >&2
+            exit 1
+          fi
+          cp -a "${SRC}/." site/
+          touch site/.nojekyll
+          # Keep a copy of the upstream licenses next to the app on Pages.
+          for f in LICENSE-MIT LICENSE-APACHE NOTICE ATTRIBUTION.md; do
+            if [ ! -e "site/${f}" ] && [ -f "${f}" ]; then
+              cp "${f}" "site/${f}"
+            fi
+          done
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
